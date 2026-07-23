@@ -10,9 +10,12 @@ from app.services.qa_chain import ask_question as qa_ask_question
 
 router = APIRouter()
 
+from typing import Optional, List, Dict, Any
+
 class QueryRequest(BaseModel):
     document_id: int
     query: str
+    chat_history: Optional[List[Dict[str, Any]]] = None
 
 @router.post("/ask")
 def ask_question(request: QueryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -22,7 +25,10 @@ def ask_question(request: QueryRequest, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Document not found or access denied")
         
     # Get answer
-    result = qa_ask_question(doc.id, request.query)
+    result = qa_ask_question(doc.id, request.query, request.chat_history)
+    
+    # Format citation safely
+    citation_str = str(result["citation"]) if result["citation"] else None
     
     # Log query
     new_log = QueryLog(
@@ -30,7 +36,7 @@ def ask_question(request: QueryRequest, current_user: User = Depends(get_current
         document_id=doc.id,
         query_text=request.query,
         response_text=result["answer"],
-        citation=result["citation"],
+        citation=citation_str,
         is_grounded=1 if result["is_grounded"] else 0
     )
     db.add(new_log)

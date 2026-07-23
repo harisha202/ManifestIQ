@@ -9,6 +9,7 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
     upload_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="Indexed")
     user_id = Column(Integer, ForeignKey("users.id"))
 
     user = relationship("User")

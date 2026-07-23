@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, MessageSquare, History, Settings, LogOut } from 'lucide-react';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -11,30 +11,30 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <img src="/logo.svg" alt="ManifestIQ Logo" style={{ width: '40px', height: '40px' }} />
         <h2>ManifestIQ</h2>
       </div>
       
       <nav className="sidebar-nav">
-        <NavLink to="/" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`} end>
+        <NavLink to="/" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`} end>
           <LayoutDashboard size={20} />
           <span>Dashboard</span>
         </NavLink>
-        <NavLink to="/documents" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+        <NavLink to="/documents" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <FileText size={20} />
           <span>Documents</span>
         </NavLink>
-        <NavLink to="/chat" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+        <NavLink to="/chat" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <MessageSquare size={20} />
           <span>Chat</span>
         </NavLink>
-        <NavLink to="/history" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+        <NavLink to="/history" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <History size={20} />
           <span>Query History</span>
         </NavLink>
-        <NavLink to="/settings" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+        <NavLink to="/settings" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Settings size={20} />
           <span>Settings</span>
         </NavLink>

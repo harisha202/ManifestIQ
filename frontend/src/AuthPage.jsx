@@ -1,37 +1,53 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import api from './api';
 import { CheckCircle } from 'lucide-react';
+import { useToast } from './ToastContext';
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const showToast = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('expired') === 'true') {
+      showToast('Session expired. Please sign in again.', 'warning');
+      navigate('/auth', { replace: true });
+    }
+  }, [location, navigate, showToast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     
     if (!isLogin && password !== confirmPassword) {
       setError("Passwords do not match");
+      setLoading(false);
       return;
     }
     
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-      const payload = isLogin 
-        ? new URLSearchParams({ username: username, password: password }) // OAuth2 expects form data for login
-        : { username, email, password }; // Custom JSON for signup
-        
-      const config = isLogin 
-        ? { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-        : {};
+      let payload;
+      let config = {};
 
-      const response = await axios.post(`http://localhost:8000${endpoint}`, payload, config);
+      if (isLogin) {
+        payload = new URLSearchParams({ username: username, email: email, password: password });
+        config = { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
+      } else {
+        payload = { username, email, password };
+      }
+
+      const response = await api.post(endpoint, payload, config);
       
       localStorage.setItem('token', response.data.access_token);
       navigate('/');
@@ -43,26 +59,26 @@ const AuthPage = () => {
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       {/* Brand Panel */}
-      <div style={{ flex: 1, backgroundColor: 'var(--primary-bg)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem' }}>
+      <div style={{ flex: 1, backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem' }}>
         <img src="/logo.svg" alt="ManifestIQ Logo" style={{ width: '80px', height: '80px', marginBottom: '1rem' }} />
-        <h1 style={{ fontSize: '3rem', marginBottom: '1rem', color: 'white' }}>ManifestIQ</h1>
-        <p style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.8)', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '3rem', marginBottom: '1rem', color: '#ffffff' }}>ManifestIQ</h1>
+        <p style={{ fontSize: '1.25rem', color: '#cbd5e1', marginBottom: '2rem' }}>
           Supply Chain Document Assistant powered by RAG.
         </p>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', color: 'var(--white)' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Project Purpose:</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', color: '#ffffff' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: '#10b981' }}>Project Purpose:</h3>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-            <CheckCircle size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>Upload and instantly index massive supply-chain documents like shipping manifests and vendor contracts.</span>
+            <CheckCircle size={20} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span style={{ color: '#ffffff', fontWeight: 500 }}>Upload and instantly index massive supply-chain documents like shipping manifests and vendor contracts.</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-            <CheckCircle size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>Ask natural-language questions and get grounded answers powered by Gemini AI and Vector Search.</span>
+            <CheckCircle size={20} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span style={{ color: '#ffffff', fontWeight: 500 }}>Ask natural-language questions and get grounded answers powered by Gemini AI and Vector Search.</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-            <CheckCircle size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>Always trace back to the source with automatically generated document citations.</span>
+            <CheckCircle size={20} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span style={{ color: '#ffffff', fontWeight: 500 }}>Always trace back to the source with automatically generated document citations.</span>
           </div>
         </div>
       </div>
@@ -93,12 +109,10 @@ const AuthPage = () => {
               <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="johndoe" />
             </div>
 
-            {!isLogin && (
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email Address</label>
-                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
-              </div>
-            )}
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email Address</label>
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
+            </div>
             
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Password</label>
