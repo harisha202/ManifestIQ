@@ -101,28 +101,28 @@ const AuthPage = () => {
             </button>
           </div>
           
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <form onSubmit={handleSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {error && <div style={{ color: 'var(--error)', fontSize: '0.875rem' }}>{error}</div>}
             
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Username</label>
-              <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="johndoe" />
+              <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="johndoe" autoComplete="new-password" />
             </div>
 
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email Address</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="new-password" />
             </div>
             
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Password</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
             </div>
 
             {!isLogin && (
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Confirm Password</label>
-                <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
+                <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
               </div>
             )}
             
