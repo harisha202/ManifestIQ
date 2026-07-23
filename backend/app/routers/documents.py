@@ -37,9 +37,10 @@ async def upload_document(
     try:
         chunks_count = ingest_document(file_path, new_doc.id)
     except Exception as e:
+        print(f"Document processing error: {str(e)}")
         db.delete(new_doc)
         db.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process document due to an internal server error.")
         
     return {"message": "Document uploaded and processed successfully", "document_id": new_doc.id, "chunks": chunks_count}
 

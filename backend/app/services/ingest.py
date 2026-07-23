@@ -1,26 +1,23 @@
 import os
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader
-import chromadb
-from chromadb.config import Settings
-from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
-import uuid
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import FAISS
+from langchain_core.embeddings import Embeddings
+from typing import List
 import requests
 from app.config import settings
 
-# Initialize ChromaDB client (local persistent storage)
-CHROMA_DATA_PATH = os.path.join(os.path.dirname(__file__), "../../chroma_db")
-os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
-chroma_client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
+FAISS_DATA_PATH = os.path.join(os.path.dirname(__file__), "../../faiss_index")
+os.makedirs(FAISS_DATA_PATH, exist_ok=True)
 
-class GoogleRESTEmbeddingFunction(EmbeddingFunction):
-    def __call__(self, input: Documents) -> Embeddings:
+class GoogleRESTLangchainEmbeddings(Embeddings):
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         api_key = settings.GOOGLE_API_KEY
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key={api_key}"
         embeddings = []
-        for text in input:
+        for text in texts:
             payload = {
-                "model": "models/text-embedding-004",
+                "model": "models/gemini-embedding-2",
                 "content": {
                     "parts": [{"text": text}]
                 }
@@ -28,14 +25,16 @@ class GoogleRESTEmbeddingFunction(EmbeddingFunction):
             resp = requests.post(url, json=payload)
             if resp.status_code != 200:
                 print(f"Embedding error: {resp.text}")
-                # Fallback to zero vector if failure
-                embeddings.append([0.0] * 768)
+                embeddings.append([0.0] * 3072)
             else:
                 data = resp.json()
                 embeddings.append(data["embedding"]["values"])
         return embeddings
 
-google_ef = GoogleRESTEmbeddingFunction()
+    def embed_query(self, text: str) -> List[float]:
+        return self.embed_documents([text])[0]
+
+google_ef = GoogleRESTLangchainEmbeddings()
 
 def ingest_document(file_path: str, document_id: int):
     # Load PDF
@@ -50,28 +49,18 @@ def ingest_document(file_path: str, document_id: int):
     )
     chunks = text_splitter.split_documents(documents)
     
-    # Store in ChromaDB
-    collection = chroma_client.get_or_create_collection(
-        name="manifestiq_docs",
-        embedding_function=google_ef
-    )
-    
-    docs = []
-    metadatas = []
-    ids = []
-    
-    for i, chunk in enumerate(chunks):
-        docs.append(chunk.page_content)
-        metadata = chunk.metadata.copy()
-        metadata["document_id"] = document_id
-        metadatas.append(metadata)
-        ids.append(f"doc_{document_id}_chunk_{i}_{uuid.uuid4().hex[:8]}")
+    for chunk in chunks:
+        chunk.metadata["document_id"] = document_id
         
-    if docs:
-        collection.add(
-            documents=docs,
-            metadatas=metadatas,
-            ids=ids
-        )
+    if not chunks:
+        return 0
+
+    if os.path.exists(os.path.join(FAISS_DATA_PATH, "index.faiss")):
+        db = FAISS.load_local(FAISS_DATA_PATH, google_ef, allow_dangerous_deserialization=True)
+        db.add_documents(chunks)
+    else:
+        db = FAISS.from_documents(chunks, google_ef)
+        
+    db.save_local(FAISS_DATA_PATH)
     
-    return len(docs)
+    return len(chunks)

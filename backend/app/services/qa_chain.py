@@ -1,22 +1,23 @@
 import os
 import requests
 from app.config import settings
-from app.services.ingest import chroma_client, google_ef
+from app.services.ingest import FAISS_DATA_PATH, google_ef
+from langchain_community.vectorstores import FAISS
 
 def ask_question(document_id: int, query: str, chat_history: list = None):
     try:
-        # Retrieve context from ChromaDB using custom embedding function
-        collection = chroma_client.get_collection(
-            name="manifestiq_docs",
-            embedding_function=google_ef
-        )
-        results = collection.query(
-            query_texts=[query],
-            n_results=4,
-            where={"document_id": document_id}
-        )
+        # Retrieve context from FAISS using custom embedding function
+        if not os.path.exists(os.path.join(FAISS_DATA_PATH, "index.faiss")):
+            return {
+                "answer": "No documents have been indexed yet.",
+                "citation": None,
+                "is_grounded": False
+            }
+            
+        db = FAISS.load_local(FAISS_DATA_PATH, google_ef, allow_dangerous_deserialization=True)
+        results = db.similarity_search(query, k=4, filter={"document_id": document_id})
         
-        if not results['documents'] or not results['documents'][0]:
+        if not results:
             return {
                 "answer": "I could not find any relevant information in the document to answer your question.",
                 "citation": None,
@@ -24,10 +25,9 @@ def ask_question(document_id: int, query: str, chat_history: list = None):
             }
             
         # Combine the retrieved chunks into a context string
-        context_chunks = results['documents'][0]
-        metadata_chunks = results['metadatas'][0]
-        
-        context_str = "\n\n---\n\n".join(context_chunks)
+        context_str = "\n\n---\n\n".join([doc.page_content for doc in results])
+        metadata_chunks = [doc.metadata for doc in results]
+
         
         # Build prompt for Gemini
         history_str = ""
@@ -55,7 +55,7 @@ Answer the question clearly and concisely.
         
         # Call Gemini REST API
         api_key = settings.GOOGLE_API_KEY
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
@@ -63,8 +63,9 @@ Answer the question clearly and concisely.
         }
         resp = requests.post(url, json=payload)
         if resp.status_code != 200:
+            print(f"Gemini API Error: {resp.status_code} - {resp.text}")
             return {
-                "answer": f"Error from Gemini API: {resp.text}",
+                "answer": "Sorry, I am currently unable to process your question due to an AI service error. Please try again later.",
                 "citation": None,
                 "is_grounded": False
             }
@@ -83,10 +84,7 @@ Answer the question clearly and concisely.
             # metadata typically contains 'page' if parsed by PyPDFLoader
             page = metadata_chunks[0].get("page", 0) + 1 # 1-indexed
             
-            # extract chunk ID from ids (e.g. doc_1_chunk_4_1a2b3c4d)
             chunk_id = "unknown"
-            if results['ids'] and results['ids'][0]:
-                chunk_id = results['ids'][0][0]
                 
             citation = {
                 "page": page,
@@ -103,7 +101,7 @@ Answer the question clearly and concisely.
     except Exception as e:
         print(f"Error in ask_question: {str(e)}")
         return {
-            "answer": f"An error occurred while processing the question: {str(e)}",
+            "answer": "An unexpected server error occurred while processing your question.",
             "citation": None,
             "is_grounded": False
         }

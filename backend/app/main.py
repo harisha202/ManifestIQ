@@ -1,3 +1,11 @@
+# Temporary fix for older Python versions (like 3.8) that have outdated SQLite
+try:
+    import pysqlite3
+    import sys
+    sys.modules["sqlite3"] = pysqlite3
+except ImportError:
+    pass
+
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,3 +39,5 @@ app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the ManifestIQ API"}
+
+# Force reload
