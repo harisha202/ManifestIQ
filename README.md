@@ -51,7 +51,7 @@ Retrieve shipment policies, compliance requirements, packaging standards, and tr
 
 
 
-
+---
 
 # 📂 Project Structure
 
@@ -73,6 +73,7 @@ ManifestIQ
 └── README.md
 ```
 
+---
 
 # 🔒 Security Features
 
@@ -98,18 +99,4 @@ ManifestIQ
 
 ---
 
-# 👨‍💻 Author
 
-**Harish A**
-
-BCA (Cloud Computing)
-
-Full Stack Developer | AI Developer | Supply Chain Analytics Enthusiast
-
-GitHub: https://github.com/harisha202
-
----
-
-# ⭐ Support
-
-If you found this project useful, consider giving it a ⭐ on GitHub.
