@@ -385,13 +385,7 @@ const ChatPanel = () => {
                           </div>
                         )}
                         
-                        {msg.retrievalAnalytics && (
-                          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
-                            <span>⏱️ {msg.retrievalAnalytics.time_ms}ms</span>
-                            <span>🧩 {msg.retrievalAnalytics.chunk_count} chunks</span>
-                            <span>🤖 {msg.retrievalAnalytics.model}</span>
-                          </div>
-                        )}
+
                       </div>
                     )}
 

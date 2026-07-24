@@ -50,7 +50,7 @@ const DocumentsPage = () => {
   const fetchDocuments = async () => {
     try {
       const res = await api.get('/api/documents/list');
-      setDocuments(res.data);
+      setDocuments(res.data.items || res.data);
     } catch (err) {
       console.error(err);
       showToast("Failed to fetch documents", "error");
