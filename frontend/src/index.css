@@ -177,3 +177,24 @@ input:focus, textarea:focus {
   color: var(--text-main);
   cursor: pointer;
 }
+
+/* Additional Mobile Responsiveness */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 4rem 1rem 1rem 1rem !important;
+  }
+  
+  .chat-container {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  
+  .chat-sidebar {
+    width: 100% !important;
+    height: 200px !important;
+  }
+  
+  .chat-sidebar + .card {
+    min-height: 500px;
+  }
+}

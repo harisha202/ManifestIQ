@@ -41,7 +41,7 @@ const AuthPage = () => {
       let config = {};
 
       if (isLogin) {
-        payload = new URLSearchParams({ username: username, email: email, password: password });
+        payload = new URLSearchParams({ identifier: email, password: password });
         config = { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
       } else {
         payload = { username, email, password };
@@ -104,15 +104,23 @@ const AuthPage = () => {
           <form onSubmit={handleSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {error && <div style={{ color: 'var(--error)', fontSize: '0.875rem' }}>{error}</div>}
             
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Username</label>
-              <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="johndoe" autoComplete="new-password" />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email Address</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="new-password" />
-            </div>
+            {isLogin ? (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email or Username</label>
+                <input type="text" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Email or Username" autoComplete="new-password" />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Username</label>
+                  <input type="text" required value={username} onChange={e => setUsername(e.target.value)} placeholder="johndoe" autoComplete="new-password" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Email Address</label>
+                  <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="new-password" />
+                </div>
+              </>
+            )}
             
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Password</label>

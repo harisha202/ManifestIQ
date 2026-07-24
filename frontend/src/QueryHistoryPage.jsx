@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 const QueryHistoryPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [history, setHistory] = useState([]);
+  const [selectedQuery, setSelectedQuery] = useState(null);
   const [loading, setLoading] = useState(true);
   const showToast = useToast();
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ const QueryHistoryPage = () => {
     const fetchHistory = async () => {
       try {
         const res = await api.get('/api/query/history');
-        setHistory(res.data);
+        setHistory(res.data.items || res.data);
       } catch (err) {
         console.error(err);
         // Fallback for when backend endpoint isn't ready
@@ -65,11 +66,16 @@ const QueryHistoryPage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan="4" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Loading history...
-                </td>
-              </tr>
+              <>
+                {[1, 2, 3].map((n) => (
+                  <tr key={n} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '80%' }}></div></td>
+                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '50%' }}></div></td>
+                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '60%' }}></div></td>
+                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '32px', width: '80px', borderRadius: '6px' }}></div></td>
+                  </tr>
+                ))}
+              </>
             ) : filteredHistory.length > 0 ? (
               filteredHistory.map((item, i) => (
                 <motion.tr 
@@ -81,7 +87,7 @@ const QueryHistoryPage = () => {
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{item.document_name || `Doc #${item.document_id}`}</td>
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{new Date(item.timestamp).toLocaleString()}</td>
                   <td style={{ padding: '1rem' }}>
-                    <button className="btn-outline" style={{ padding: '0.5rem 1rem' }} onClick={() => showToast('View Details feature coming soon!', 'success')}>View</button>
+                    <button className="btn-outline" style={{ padding: '0.5rem 1rem' }} onClick={() => setSelectedQuery(item)}>View</button>
                   </td>
                 </motion.tr>
               ))
@@ -102,6 +108,52 @@ const QueryHistoryPage = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Detail Modal */}
+      {selectedQuery && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--white)', padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Query Details</h2>
+              <button onClick={() => setSelectedQuery(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-muted)' }}>&times;</button>
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Question</h4>
+              <p style={{ fontWeight: 500, fontSize: '1.1rem' }}>{selectedQuery.query}</p>
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Answer</h4>
+              <p style={{ lineHeight: '1.6', whiteSpace: 'pre-wrap', backgroundColor: 'var(--bg-light)', padding: '1rem', borderRadius: '8px' }}>{selectedQuery.answer}</p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+              <div><strong>Document:</strong> {selectedQuery.document_name}</div>
+              <div><strong>Date:</strong> {new Date(selectedQuery.timestamp).toLocaleString()}</div>
+              <div><strong>Response Time:</strong> {selectedQuery.response_time_ms}ms</div>
+              <div><strong>Grounded:</strong> {selectedQuery.is_grounded ? 'Yes' : 'No'}</div>
+            </div>
+
+            {selectedQuery.citations && selectedQuery.citations.length > 0 && (
+              <div>
+                <h4 style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>Citations ({selectedQuery.citations.length})</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {selectedQuery.citations.map((cit, idx) => (
+                    <div key={idx} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>{cit.section}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Page {cit.page} • Relevance Score: {cit.confidence}</span>
+                      </div>
+                      <p style={{ fontSize: '0.875rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>"{cit.snippet}"</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

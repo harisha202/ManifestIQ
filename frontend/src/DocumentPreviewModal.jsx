@@ -98,6 +98,40 @@ const DocumentPreviewModal = ({ isOpen, onClose, document }) => {
                 </div>
               </div>
             </div>
+
+            {/* Summary & Keywords */}
+            {(document.summary || (document.keywords && document.keywords.length > 0)) && (
+              <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+                {document.summary && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h4 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Summary</h4>
+                    <p style={{ fontSize: '0.95rem', lineHeight: '1.5', color: 'var(--text-main)', margin: 0 }}>
+                      {document.summary}
+                    </p>
+                  </div>
+                )}
+                
+                {document.keywords && document.keywords.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Keywords</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {document.keywords.map((kw, i) => (
+                        <span key={i} style={{ 
+                          padding: '0.25rem 0.75rem', 
+                          backgroundColor: 'rgba(29, 158, 117, 0.1)', 
+                          color: 'var(--primary)', 
+                          borderRadius: '16px', 
+                          fontSize: '0.8rem',
+                          fontWeight: 500
+                        }}>
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer */}
