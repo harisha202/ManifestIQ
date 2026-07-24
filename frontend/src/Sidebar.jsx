@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, MessageSquare, History, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, MessageSquare, History, Settings, LogOut, BarChart2 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
@@ -33,6 +33,10 @@ const Sidebar = ({ isOpen, onClose }) => {
         <NavLink to="/history" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <History size={20} />
           <span>Query History</span>
+        </NavLink>
+        <NavLink to="/analytics" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+          <BarChart2 size={20} />
+          <span>Analytics</span>
         </NavLink>
         <NavLink to="/settings" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Settings size={20} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SearchX, MessageSquare } from 'lucide-react';
+import { Search, SearchX, MessageSquare, Download } from 'lucide-react';
 import api from './api';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from './ToastContext';
@@ -34,6 +34,32 @@ const QueryHistoryPage = () => {
     (item.document_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleExportCSV = () => {
+    if (filteredHistory.length === 0) return;
+    const headers = ['Query', 'Document', 'Answer', 'Date', 'Response Time (ms)', 'Grounded'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredHistory.map(row => {
+        const escapedQuery = `"${(row.query || '').replace(/"/g, '""')}"`;
+        const escapedDoc = `"${(row.document_name || '').replace(/"/g, '""')}"`;
+        const escapedAnswer = `"${(row.answer || '').replace(/"/g, '""')}"`;
+        const dateStr = `"${new Date(row.timestamp).toLocaleString()}"`;
+        return `${escapedQuery},${escapedDoc},${escapedAnswer},${dateStr},${row.response_time_ms},${row.is_grounded ? 'Yes' : 'No'}`;
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'manifestiq_query_history.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Exported history to CSV", "success");
+  };
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
       <div className="page-header">
@@ -41,8 +67,8 @@ const QueryHistoryPage = () => {
         <p>Review past questions and answers across all your documents.</p>
       </div>
 
-      <div className="card" style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid var(--border)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
+      <div className="card" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid var(--border)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
           <Search size={20} color="var(--text-muted)" />
           <input 
             type="text" 
@@ -52,6 +78,9 @@ const QueryHistoryPage = () => {
             style={{ border: 'none', padding: 0, outline: 'none', backgroundColor: 'transparent', width: '100%' }}
           />
         </div>
+        <button className="btn-outline" onClick={handleExportCSV} disabled={filteredHistory.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
+          <Download size={18} /> Export CSV
+        </button>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

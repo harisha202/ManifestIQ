@@ -7,6 +7,7 @@ import DocumentsPage from './DocumentsPage';
 import ChatPanel from './ChatPanel';
 import QueryHistoryPage from './QueryHistoryPage';
 import SettingsPage from './SettingsPage';
+import AnalyticsPage from './AnalyticsPage';
 import Sidebar from './Sidebar';
 import { ToastProvider } from './ToastContext';
 import { ThemeProvider } from './ThemeContext';
@@ -97,6 +98,14 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <SettingsPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AnalyticsPage />
                 </Layout>
               </ProtectedRoute>
             } />
