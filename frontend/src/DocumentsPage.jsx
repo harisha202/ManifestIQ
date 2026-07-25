@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from './api';
-import { Upload, FileText, Search, Filter, FileUp, CheckCircle, Database, Layers, File, Server } from 'lucide-react';
+import { Upload, FileText, Search, FileUp, CheckCircle, Database, Layers, Server, Trash2, ExternalLink } from 'lucide-react';
 import { useToast } from './ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import DocumentPreviewModal from './DocumentPreviewModal';
@@ -28,15 +28,12 @@ const DocumentsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('All');
   const [selectedPreviewDoc, setSelectedPreviewDoc] = useState(null);
   
-  // Semantic Search State
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'search'
-  const [semanticQuery, setSemanticQuery] = useState('');
-  const [semanticResults, setSemanticResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  
+  // Selection for bulk actions
+  const [selectedDocs, setSelectedDocs] = useState([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Pipeline Simulation State
   const [pipelineStep, setPipelineStep] = useState(0); 
   // 1: Uploading, 2: Extracting, 3: Chunking, 4: Embedding, 5: Saving, 6: Ready
@@ -117,7 +114,7 @@ const DocumentsPage = () => {
       
       clearInterval(simInterval);
       setPipelineStep(6);
-      showToast("Document uploaded and indexed successfully", "success");
+      showToast("Document uploaded successfully", "success");
       fetchDocuments();
       
       setTimeout(() => {
@@ -138,68 +135,77 @@ const DocumentsPage = () => {
     let color = 'var(--text-muted)';
     let bg = 'var(--bg-light)';
     
-    if (s === 'Indexed') { color = 'var(--success)'; bg = 'rgba(16, 185, 129, 0.1)'; }
+    if (s === 'Indexed') { color = 'var(--success)'; bg = 'rgba(34, 197, 94, 0.1)'; }
     if (s === 'Processing') { color = 'var(--warning)'; bg = 'rgba(245, 158, 11, 0.1)'; }
     if (s === 'Failed') { color = 'var(--error)'; bg = 'rgba(239, 68, 68, 0.1)'; }
 
     return (
-      <span style={{ padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color, backgroundColor: bg }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color, backgroundColor: bg }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }}></div>
         {s}
       </span>
     );
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return '-';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const filteredDocs = documents.filter(doc => {
     const matchesSearch = doc.filename.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'All' || (doc.status || 'Indexed') === statusFilter;
     const matchesType = typeFilter === 'All' || doc.filename.toLowerCase().endsWith('.pdf');
-    
-    let matchesDate = true;
-    if (dateFilter !== 'All') {
-      const docDate = new Date(doc.upload_date);
-      const now = new Date();
-      if (dateFilter === 'Today') {
-        matchesDate = docDate.toDateString() === now.toDateString();
-      } else if (dateFilter === 'Past 7 Days') {
-        matchesDate = (now - docDate) / (1000 * 3600 * 24) <= 7;
-      }
-    }
-    
-    return matchesSearch && matchesStatus && matchesType && matchesDate;
+    return matchesSearch && matchesStatus && matchesType;
   });
 
-  const handleSemanticSearch = async (e) => {
-    e.preventDefault();
-    if (!semanticQuery.trim()) return;
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedDocs(filteredDocs.map(d => d.id));
+    } else {
+      setSelectedDocs([]);
+    }
+  };
+
+  const handleSelectOne = (e, id) => {
+    if (e.target.checked) {
+      setSelectedDocs([...selectedDocs, id]);
+    } else {
+      setSelectedDocs(selectedDocs.filter(docId => docId !== id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocs.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedDocs.length} document(s)?`)) return;
     
-    setIsSearching(true);
+    setIsDeleting(true);
     try {
-      const res = await api.post('/api/documents/search', {
-        query: semanticQuery,
-        document_ids: [] // search all user docs
-      });
-      setSemanticResults(res.data.results);
+      await api.post('/api/documents/delete', { document_ids: selectedDocs });
+      showToast(`Successfully deleted ${selectedDocs.length} documents`, "success");
+      setSelectedDocs([]);
+      fetchDocuments();
     } catch (err) {
       console.error(err);
-      showToast("Semantic search failed", "error");
+      showToast("Failed to delete documents", "error");
     } finally {
-      setIsSearching(false);
+      setIsDeleting(false);
     }
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="page-header">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ padding: '2rem' }}>
+      <div className="page-header section-spacing">
         <h1>Documents</h1>
-        <p>Manage your uploaded supply-chain documents here.</p>
+        <p>Manage and index your supply-chain documents.</p>
       </div>
 
       <div 
-        className="card" 
+        className="card section-spacing" 
         style={{ 
-          marginBottom: '2rem', 
-          border: dragActive ? '2px dashed var(--primary)' : '2px dashed var(--border)',
-          backgroundColor: dragActive ? 'rgba(29, 158, 117, 0.05)' : 'var(--white)',
+          border: dragActive ? '2px dashed var(--primary)' : '1px dashed var(--border)',
+          backgroundColor: dragActive ? 'var(--primary-bg)' : 'var(--white)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem',
           position: 'relative', overflow: 'hidden', minHeight: '300px'
         }}
@@ -260,172 +266,115 @@ const DocumentsPage = () => {
         </AnimatePresence>
       </div>
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Document Library</h3>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        
+        {/* Toolbar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', backgroundColor: 'var(--bg-light)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '1rem' }}>
           
-          <div style={{ display: 'flex', backgroundColor: 'var(--bg-light)', padding: '0.25rem', borderRadius: '8px' }}>
-            <button 
-              onClick={() => setViewMode('list')}
-              style={{ 
-                padding: '0.5rem 1rem', 
-                backgroundColor: viewMode === 'list' ? 'var(--white)' : 'transparent',
-                boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500,
-                color: viewMode === 'list' ? 'var(--text-main)' : 'var(--text-muted)'
-              }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                placeholder="Search documents..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ paddingLeft: '35px', width: '250px', backgroundColor: 'var(--white)' }}
+              />
+            </div>
+            <select 
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--white)', color: 'var(--text-main)', fontFamily: 'Inter' }}
             >
-              List View
-            </button>
-            <button 
-              onClick={() => setViewMode('search')}
-              style={{ 
-                padding: '0.5rem 1rem', 
-                backgroundColor: viewMode === 'search' ? 'var(--white)' : 'transparent',
-                boxShadow: viewMode === 'search' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500,
-                color: viewMode === 'search' ? 'var(--text-main)' : 'var(--text-muted)'
-              }}
-            >
-              Semantic Search
-            </button>
+              <option value="All">All Statuses</option>
+              <option value="Indexed">Indexed</option>
+              <option value="Processing">Processing</option>
+              <option value="Failed">Failed</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {selectedDocs.length > 0 && (
+              <button 
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+                className="btn-outline" 
+                style={{ borderColor: 'var(--error)', color: 'var(--error)', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)' }}
+              >
+                <Trash2 size={16} /> Delete Selected ({selectedDocs.length})
+              </button>
+            )}
           </div>
         </div>
 
-        {viewMode === 'list' ? (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ position: 'relative' }}>
-                <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input 
-                  type="text" 
-                  placeholder="Filter by name..." 
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  style={{ paddingLeft: '35px', width: '200px' }}
-                />
-              </div>
-              <select 
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--white)', color: 'var(--text-main)', fontFamily: 'Inter' }}
-              >
-                <option value="All">All Statuses</option>
-                <option value="Indexed">Indexed</option>
-                <option value="Processing">Processing</option>
-                <option value="Failed">Failed</option>
-              </select>
-              <select 
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
-                style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--white)', color: 'var(--text-main)', fontFamily: 'Inter' }}
-              >
-                <option value="All">All Types</option>
-                <option value="PDF">PDF Only</option>
-              </select>
-              <select 
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                style={{ padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--white)', color: 'var(--text-main)', fontFamily: 'Inter' }}
-              >
-                <option value="All">Any Time</option>
-                <option value="Today">Today</option>
-                <option value="Past 7 Days">Past 7 Days</option>
-              </select>
-            </div>
-
-        {filteredDocs.length > 0 ? (
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            {filteredDocs.map((doc, i) => (
-              <motion.div 
-                initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                key={doc.id} 
-                style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--white)' }}
-              >
-                <FileText size={24} color="var(--primary)" />
-                <div style={{ flex: 1 }}>
-                  <h4 style={{ fontWeight: 500 }}>{doc.filename}</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.25rem' }}>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Uploaded: {new Date(doc.upload_date).toLocaleDateString()}</p>
-                    {getStatusBadge(doc.status)}
-                  </div>
-                </div>
-                <button className="btn-outline" onClick={() => setSelectedPreviewDoc(doc)}>View Details</button>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--bg-light)', borderRadius: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <FileUp size={48} style={{ margin: '0 auto 1.5rem auto', color: 'var(--border)' }} />
-            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>No documents found</h3>
-            <p style={{ marginBottom: '1.5rem' }}>Try adjusting your search filters or upload a new document.</p>
-          </div>
-        )}
-        </>
-        ) : (
-          <div style={{ paddingTop: '1rem' }}>
-            <form onSubmit={handleSemanticSearch} style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
-              <input 
-                type="text" 
-                placeholder="Search for concepts across all documents..." 
-                value={semanticQuery}
-                onChange={e => setSemanticQuery(e.target.value)}
-                style={{ flex: 1, padding: '1rem', fontSize: '1rem' }}
-              />
-              <button type="submit" className="btn-primary" disabled={isSearching || !semanticQuery.trim()}>
-                {isSearching ? 'Searching...' : 'Search'}
-              </button>
-            </form>
-            
-            {semanticResults.length > 0 ? (
-              <div style={{ display: 'grid', gap: '1rem' }}>
-                {semanticResults.map((result, i) => {
-                  const doc = documents.find(d => d.id === result.document_id);
-                  return (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                      key={i} 
-                      style={{ padding: '1.5rem', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--bg-light)' }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <FileText size={18} color="var(--primary)" />
-                          <strong style={{ color: 'var(--text-main)' }}>{doc ? doc.filename : `Document #${result.document_id}`}</strong>
-                        </div>
-                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>Page {result.page}</span>
-                          <span style={{ color: 'var(--success)' }}>{result.confidence.toFixed(1)}% Match</span>
-                        </div>
+        {/* Table */}
+        <div style={{ overflowX: 'auto', maxHeight: '500px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--white)', zIndex: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <tr>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', width: '40px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={filteredDocs.length > 0 && selectedDocs.length === filteredDocs.length}
+                    onChange={handleSelectAll}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                </th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Name</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Type</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Pages</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Chunks</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Size</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Status</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDocs.length > 0 ? (
+                filteredDocs.map(doc => (
+                  <tr key={doc.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s', backgroundColor: selectedDocs.includes(doc.id) ? 'var(--primary-bg)' : 'transparent' }}>
+                    <td style={{ padding: '1rem 1.5rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedDocs.includes(doc.id)}
+                        onChange={(e) => handleSelectOne(e, doc.id)}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', fontWeight: 500, color: 'var(--text-main)', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FileText size={16} color="var(--primary)" style={{ flexShrink: 0 }} /> {doc.filename}
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: '1.6', color: 'var(--text-main)' }}>
-                        "...{result.content}..."
-                      </p>
-                      {doc && (
-                        <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-                          <button 
-                            className="btn-outline" 
-                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                            onClick={() => setSelectedPreviewDoc(doc)}
-                          >
-                            View Document
-                          </button>
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            ) : semanticQuery && !isSearching ? (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No semantic matches found. Try rephrasing your search.
-              </div>
-            ) : (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Enter a concept or question above to search across the text of all your documents.
-              </div>
-            )}
-          </div>
-        )}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>PDF</td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>{doc.pages || '-'}</td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>{doc.chunk_count || '-'}</td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>{formatSize(doc.file_size_bytes)}</td>
+                    <td style={{ padding: '1rem 1.5rem' }}>{getStatusBadge(doc.status)}</td>
+                    <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
+                      <button 
+                        onClick={() => setSelectedPreviewDoc(doc)}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
+                        title="Preview"
+                      >
+                        <ExternalLink size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="8" style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <FileUp size={48} style={{ margin: '0 auto 1.5rem auto', color: 'var(--border)' }} />
+                    <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>No documents found</h3>
+                    <p style={{ marginBottom: '1.5rem' }}>Try adjusting your search filters or upload a new document.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <DocumentPreviewModal 

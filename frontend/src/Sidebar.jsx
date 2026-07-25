@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, MessageSquare, History, Settings, LogOut, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, FileText, MessageSquare, History, Settings, LogOut, BarChart2, Info } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
@@ -41,6 +41,10 @@ const Sidebar = ({ isOpen, onClose }) => {
         <NavLink to="/settings" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Settings size={20} />
           <span>Settings</span>
+        </NavLink>
+        <NavLink to="/about" onClick={onClose} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Info size={20} />
+          <span>About</span>
         </NavLink>
       </nav>
       

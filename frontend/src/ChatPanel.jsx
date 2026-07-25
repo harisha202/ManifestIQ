@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from './api';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Send, FileText, CheckCircle, AlertTriangle, Copy, RefreshCw, User, FileUp, ThumbsUp, ThumbsDown, Download, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Send, FileText, CheckCircle, AlertTriangle, Copy, RefreshCw, User, FileUp, Download, ExternalLink, Clock, Database, Cpu, X, PlusCircle, Check, HelpCircle, FileCheck, Calendar } from 'lucide-react';
 import { useToast } from './ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PdfViewer from './PdfViewer';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const ChatPanel = () => {
   const location = useLocation();
@@ -14,10 +16,12 @@ const ChatPanel = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPdf, setShowPdf] = useState(false);
+  const [processingStage, setProcessingStage] = useState(null);
+  const [showPdf, setShowPdf] = useState(null);
   const messagesEndRef = useRef(null);
   const pdfRef = useRef(null);
   const showToast = useToast();
+  const [sessionStartTime] = useState(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
 
   useEffect(() => {
     fetchDocuments();
@@ -25,12 +29,12 @@ const ChatPanel = () => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, processingStage]);
 
   const fetchDocuments = async () => {
     try {
       const res = await api.get('/api/documents/list');
-      setDocuments(res.data.items || res.data); // Support both old and new format during transition
+      setDocuments(res.data.items || res.data);
       if (res.data.items && res.data.items.length > 0 && selectedDocs.length === 0) {
         setSelectedDocs([res.data.items[0].id]);
       } else if (res.data.length > 0 && selectedDocs.length === 0) {
@@ -48,6 +52,11 @@ const ChatPanel = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
+    setProcessingStage('searching');
+    
+    const retrieveTimeout = setTimeout(() => {
+      setProcessingStage(prev => prev === 'searching' ? 'retrieving' : prev);
+    }, 800);
 
     try {
       const historyToPass = messages.map(m => ({ role: m.role, text: m.text }));
@@ -58,6 +67,7 @@ const ChatPanel = () => {
         role: 'assistant',
         text: '',
         citations: [],
+        retrievalAnalytics: null,
         isGrounded: true,
         originalQuery: queryText,
         feedback: 0
@@ -93,6 +103,7 @@ const ChatPanel = () => {
             const data = JSON.parse(line);
             
             if (data.type === 'token') {
+              setProcessingStage('generating');
               setMessages(prev => prev.map(m => 
                 m.id === assistantMsgId ? { ...m, text: m.text + data.text } : m
               ));
@@ -101,20 +112,23 @@ const ChatPanel = () => {
                 m.id === assistantMsgId ? { 
                   ...m, 
                   text: data.full_answer,
-                  citations: data.citations,
+                  citations: (data.citations || []).sort((a, b) => b.confidence - a.confidence), // Sort by confidence desc
                   retrievalAnalytics: data.retrieval_analytics,
                   isGrounded: data.is_grounded,
                   logId: data.log_id
                 } : m
               ));
+              setProcessingStage(null);
+              clearTimeout(retrieveTimeout);
             } else if (data.type === 'error') {
                setMessages(prev => prev.map(m => 
                 m.id === assistantMsgId ? { 
                   ...m, 
-                  text: m.text + "\n\n[Error: " + data.message + "]",
+                  text: m.text + "\n\n**Error:** " + data.message,
                   isError: true
                 } : m
               ));
+              setProcessingStage(null);
             }
           } catch (e) {
             console.error("Error parsing stream chunk", e);
@@ -122,6 +136,8 @@ const ChatPanel = () => {
         }
       }
     } catch (err) {
+      clearTimeout(retrieveTimeout);
+      setProcessingStage(null);
       const errorMsg = { 
         id: Date.now() + 1, 
         role: 'assistant', 
@@ -147,25 +163,10 @@ const ChatPanel = () => {
     showToast("Copied to clipboard", "success");
   };
 
-  const regenerateResponse = (queryText) => {
-    handleSend(queryText);
-  };
-
-  const handleFeedback = async (msgId, logId, feedbackValue) => {
-    if (!logId) return;
-    
-    // Optimistic update
-    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, feedback: feedbackValue } : m));
-    
-    try {
-      await api.post(`/api/query/${logId}/feedback`, { feedback: feedbackValue });
-      showToast("Feedback recorded", "success");
-    } catch (err) {
-      console.error(err);
-      // Revert on error
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, feedback: 0 } : m));
-      showToast("Failed to record feedback", "error");
-    }
+  const clearChat = () => {
+    setMessages([]);
+    setShowPdf(null);
+    setProcessingStage(null);
   };
 
   const exportChat = () => {
@@ -182,7 +183,7 @@ const ChatPanel = () => {
       if (msg.citations && msg.citations.length > 0) {
         mdContent += `*Sources:*\n`;
         msg.citations.forEach(cit => {
-          mdContent += `- Page ${cit.page}, Section: ${cit.section} (Match: ${cit.confidence})\n`;
+          mdContent += `- ${cit.filename} (Page ${cit.page}) - Relevance: ${cit.confidence}\n`;
         });
         mdContent += `\n`;
       }
@@ -200,12 +201,40 @@ const ChatPanel = () => {
     showToast("Chat exported successfully", "success");
   };
 
+  const openPdf = (docId, page) => {
+    setShowPdf({ docId, page });
+    setTimeout(() => {
+      if (pdfRef.current) {
+        pdfRef.current.goToPage(page);
+      }
+    }, 300);
+  };
+
+  const latestAiMsg = [...messages].reverse().find(m => m.role === 'assistant' && (m.citations?.length > 0 || m.retrievalAnalytics));
+
+  // Compute metrics for the right panel
+  const citations = latestAiMsg?.citations || [];
+  const uniqueDocs = new Set(citations.map(c => c.document_id)).size;
+  const avgSimilarity = citations.length > 0 
+    ? (citations.reduce((acc, c) => acc + c.confidence, 0) / citations.length).toFixed(0) 
+    : 0;
+
+  const totalQuestions = messages.filter(m => m.role === 'user').length;
+  
+  // Compute overall sources used in session
+  const sessionUniqueDocs = new Set();
+  messages.forEach(m => {
+    if (m.citations) {
+      m.citations.forEach(c => sessionUniqueDocs.add(c.document_id));
+    }
+  });
+
   return (
-    <div className="chat-container" style={{ display: 'flex', height: 'calc(100vh - 4rem)', gap: '1.5rem' }}>
+    <div className="chat-container" style={{ display: 'flex', height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
       
-      {/* Document Selection Sidebar */}
-      <div className="chat-sidebar card" style={{ display: 'flex', flexDirection: 'column', padding: '1.5rem', backgroundColor: 'var(--white)' }}>
-        <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Selected Documents ({selectedDocs.length})</h3>
+      {/* 1. Left Column - Document Selection */}
+      <div className="chat-sidebar" style={{ width: '250px', display: 'flex', flexDirection: 'column', padding: '1.5rem', backgroundColor: 'var(--bg-light)', borderRight: '1px solid var(--border)', flexShrink: 0 }}>
+        <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-main)', fontWeight: 600 }}>Selected Documents</h3>
         {documents.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto' }}>
             {documents.map(doc => (
@@ -223,269 +252,173 @@ const ChatPanel = () => {
                   borderRadius: '6px',
                   cursor: 'pointer',
                   border: selectedDocs.includes(doc.id) ? '1px solid var(--primary)' : '1px solid var(--border)',
-                  backgroundColor: selectedDocs.includes(doc.id) ? 'rgba(29, 158, 117, 0.05)' : 'transparent',
+                  backgroundColor: selectedDocs.includes(doc.id) ? 'var(--white)' : 'transparent',
                   display: 'flex', alignItems: 'center', gap: '0.75rem',
                   transition: 'all 0.2s'
                 }}
               >
-                <FileText size={18} color={selectedDocs.includes(doc.id) ? 'var(--primary)' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
+                <FileText size={16} color={selectedDocs.includes(doc.id) ? 'var(--primary)' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
                 <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '0.875rem', fontWeight: selectedDocs.includes(doc.id) ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selectedDocs.includes(doc.id) ? 'var(--primary-dark)' : 'var(--text-main)' }}>
+                  <span style={{ fontSize: '0.875rem', fontWeight: selectedDocs.includes(doc.id) ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selectedDocs.includes(doc.id) ? 'var(--primary)' : 'var(--text-main)' }}>
                     {doc.filename}
                   </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {doc.id} {doc.status === 'Indexed' ? '• Ready' : `• ${doc.status}`}</span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <div style={{ textAlign: 'center', marginTop: '3rem' }}>
-             <FileUp size={48} color="var(--border)" style={{ margin: '0 auto 1rem auto' }} />
-             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>No documents available for querying.</p>
-             <button className="btn-primary" onClick={() => navigate('/documents')} style={{ width: '100%' }}>Upload Document</button>
+             <FileUp size={32} color="var(--border)" style={{ margin: '0 auto 1rem auto' }} />
+             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>No documents available.</p>
+             <button className="btn-primary" onClick={() => navigate('/documents')} style={{ width: '100%', padding: '0.5rem', fontSize: '0.875rem' }}>Upload</button>
           </div>
         )}
       </div>
 
-      {/* Chat Area - ChatGPT Style */}
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', backgroundColor: 'var(--bg-light)', position: 'relative' }}>
+      {/* 2. Middle Column - Conversation */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--white)', position: 'relative', overflow: 'hidden' }}>
         
         {/* Header Actions */}
-        <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
-          {selectedDocs.length === 1 && (
-            <button 
-              onClick={() => setShowPdf(!showPdf)}
-              style={{ 
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.5rem 1rem', borderRadius: '6px',
-                backgroundColor: showPdf ? 'var(--primary)' : 'var(--white)', 
-                border: '1px solid var(--border)',
-                color: showPdf ? 'white' : 'var(--text-main)', 
-                fontSize: '0.875rem', cursor: 'pointer',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s'
-              }}
-            >
-              {showPdf ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-              {showPdf ? 'Hide PDF' : 'Show PDF'}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-light)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>ManifestIQ AI Assistant</h2>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Ask questions about your indexed supply-chain documents.</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={clearChat} className="btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)' }}>
+              <PlusCircle size={16} /> New Chat
             </button>
-          )}
-          
-          {messages.length > 0 && (
-            <button 
-              onClick={exportChat}
-              style={{ 
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.5rem 1rem', borderRadius: '6px',
-                backgroundColor: 'var(--white)', border: '1px solid var(--border)',
-                color: 'var(--text-main)', fontSize: '0.875rem', cursor: 'pointer',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-              }}
-            >
-              <Download size={16} /> Export Chat
+            <button onClick={exportChat} disabled={messages.length === 0} className="btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)', opacity: messages.length === 0 ? 0.5 : 1 }}>
+              <Download size={16} /> Export
             </button>
-          )}
+          </div>
         </div>
         
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
           {messages.length === 0 ? (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-              <img src="/logo.svg" alt="ManifestIQ" style={{ width: '64px', height: '64px', marginBottom: '1.5rem', opacity: 0.5, filter: 'grayscale(100%)' }} />
-              <h2 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>How can I help you today?</h2>
-              <p>Select a document and ask a question to begin analyzing it.</p>
+              <img src="/logo.svg" alt="ManifestIQ" style={{ width: '64px', height: '64px', marginBottom: '1.5rem', opacity: 0.8 }} />
+              <h2 style={{ marginBottom: '0.5rem', color: 'var(--text-main)', fontSize: '1.5rem' }}>ManifestIQ AI</h2>
+              <p style={{ marginBottom: '2rem' }}>Ask questions about your indexed supply-chain documents.</p>
+              
+              <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-main)' }}>Supported Formats</p>
+                  <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}><Check size={16} color="var(--success)" /> PDF</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}><Check size={16} color="var(--success)" /> DOCX</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}><Check size={16} color="var(--success)" /> TXT</span>
+                  </div>
+                </div>
+
+                {selectedDocs.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-main)' }}>Suggested Questions</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {['Summarize this document.', 'Explain payment terms.', 'Show delivery deadlines.'].map((sq, idx) => (
+                        <button 
+                          key={idx}
+                          onClick={() => handleSend(sq)}
+                          style={{
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            fontSize: '0.875rem',
+                            color: 'var(--primary)',
+                            textAlign: 'left',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <HelpCircle size={16} /> {sq}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             messages.map((msg, i) => (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-                key={msg.id} 
-                style={{ 
-                  display: 'flex', 
-                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  padding: '1rem 2rem', 
-                }}
-              >
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '1rem', 
-                  maxWidth: '80%', 
-                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
-                }}>
-                  {/* Avatar */}
+              <div key={msg.id} style={{ display: 'flex', marginBottom: '2rem' }}>
+                <div style={{ width: '40px', flexShrink: 0, marginRight: '1rem', display: 'flex', justifyContent: 'center' }}>
                   <div style={{ 
-                    width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+                    width: '32px', height: '32px', borderRadius: '4px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: msg.role === 'user' ? 'var(--primary-dark)' : 'var(--white)',
-                    border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
-                    color: 'white'
+                    backgroundColor: msg.role === 'user' ? 'var(--bg-light)' : 'var(--primary)',
+                    color: msg.role === 'user' ? 'var(--text-secondary)' : 'var(--white)',
+                    border: '1px solid var(--border)'
                   }}>
-                    {msg.role === 'user' ? <User size={20} /> : <img src="/logo.svg" alt="AI" style={{ width: '24px', height: '24px' }} />}
+                    {msg.role === 'user' ? <User size={18} /> : <img src="/logo.svg" alt="AI" style={{ width: '18px', height: '18px', filter: 'brightness(0) invert(1)' }} />}
+                  </div>
+                </div>
+                
+                <div style={{ flex: 1, maxWidth: 'calc(100% - 56px)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>
+                    {msg.role === 'user' ? 'User' : 'ManifestIQ AI'}
                   </div>
                   
-                  {/* Content */}
-                  <div style={{ 
-                    flex: 1, 
-                    backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'var(--bg-light)',
-                    color: msg.role === 'user' ? '#ffffff' : 'var(--text-main)',
-                    padding: '1.25rem',
-                    borderRadius: '16px',
-                    borderTopRightRadius: msg.role === 'user' ? '4px' : '16px',
-                    borderTopLeftRadius: msg.role === 'assistant' ? '4px' : '16px',
-                    lineHeight: '1.7', 
-                    fontSize: '1rem',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                  }}>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
-                    
-                    {/* Grounding Badge and Citation */}
-                    {msg.role === 'assistant' && !msg.isError && (
-                      <div style={{ marginTop: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.5rem', fontWeight: 500, fontSize: '0.875rem', color: msg.isGrounded ? 'var(--success)' : 'var(--warning)' }}>
-                          {msg.isGrounded ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-                          {msg.isGrounded ? 'Grounded Answer' : 'Unverified Answer'}
-                        </div>
-                        
-                        {msg.citations && msg.citations.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <FileText size={16} color="var(--primary)" /> Sources ({msg.citations.length})
-                            </div>
-                            {msg.citations.map((cit, idx) => (
-                              <div key={idx} style={{ padding: '1rem', backgroundColor: 'var(--white)', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.875rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                    <span style={{ fontWeight: 600, color: 'var(--primary-dark)' }}>{cit.section}</span>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Page {cit.page} • Chunk {cit.chunk_id} • Relevance Score: {cit.confidence}</span>
-                                  </div>
-                                  <button 
-                                    onClick={() => {
-                                      if (selectedDocs.length === 1 || cit.document_id === selectedDocs[0]) {
-                                        setShowPdf(true);
-                                        // Small timeout to allow the PdfViewer to render if it was hidden
-                                        setTimeout(() => {
-                                          if (pdfRef.current) pdfRef.current.goToPage(cit.page);
-                                        }, 100);
-                                      } else {
-                                        // Open in new tab if it's a multi-doc chat and the citation is from a different doc
-                                        window.open(`http://localhost:8000/api/documents/${cit.document_id}/pdf?token=${localStorage.getItem('token')}#page=${cit.page}`, '_blank');
-                                      }
-                                    }}
-                                    className="btn-outline" 
-                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}
-                                  >
-                                    View Source
-                                  </button>
-                                </div>
-                                <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: '1.4' }}>
-                                  "{cit.snippet}"
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    {msg.role === 'assistant' && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => copyToClipboard(msg.text)} title="Copy response" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}>
-                            <Copy size={18} />
-                          </button>
-                          <button onClick={() => regenerateResponse(msg.originalQuery)} title="Regenerate response" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}>
-                            <RefreshCw size={18} />
-                          </button>
-                        </div>
-                        {msg.logId && (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button 
-                              onClick={() => handleFeedback(msg.id, msg.logId, msg.feedback === 1 ? 0 : 1)} 
-                              title="Helpful" 
-                              style={{ background: 'none', border: 'none', color: msg.feedback === 1 ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
-                            >
-                              <ThumbsUp size={18} fill={msg.feedback === 1 ? 'currentColor' : 'none'} />
-                            </button>
-                            <button 
-                              onClick={() => handleFeedback(msg.id, msg.logId, msg.feedback === -1 ? 0 : -1)} 
-                              title="Not helpful" 
-                              style={{ background: 'none', border: 'none', color: msg.feedback === -1 ? 'var(--error)' : 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', transition: 'color 0.2s' }}
-                            >
-                              <ThumbsDown size={18} fill={msg.feedback === -1 ? 'currentColor' : 'none'} />
-                            </button>
+                  <div style={{ color: 'var(--text-main)' }}>
+                    {msg.role === 'user' ? (
+                      <div style={{ fontSize: '1rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                    ) : (
+                      <div className="markdown-body">
+                        {msg.text ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                        ) : (
+                          // Processing Indicator
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--primary)', fontStyle: 'italic', fontSize: '0.875rem' }}>
+                            <RefreshCw size={16} className="spin-animation" />
+                            {processingStage === 'searching' && "Searching documents..."}
+                            {processingStage === 'retrieving' && "Retrieving relevant chunks..."}
+                            {processingStage === 'generating' && "Generating response..."}
+                            <style>{`
+                              @keyframes spin { 100% { transform: rotate(360deg); } }
+                              .spin-animation { animation: spin 1s linear infinite; }
+                            `}</style>
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                </div>
-              </motion.div>
-            ))
-          )}
-          {loading && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '1rem 2rem' }}>
-              <div style={{ display: 'flex', gap: '1rem', maxWidth: '80%' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--white)', border: '1px solid var(--border)' }}>
-                  <img src="/logo.svg" alt="AI" style={{ width: '24px', height: '24px' }} />
-                </div>
-                <div style={{ flex: 1, backgroundColor: 'var(--bg-light)', padding: '1.25rem', borderRadius: '16px', borderTopLeftRadius: '4px', width: '300px' }}>
-                  <div className="skeleton" style={{ width: '60%', height: '20px', marginBottom: '0.5rem' }}></div>
-                  <div className="skeleton" style={{ width: '40%', height: '20px' }}></div>
+
+                  {msg.role === 'assistant' && msg.text && (
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                      <button onClick={() => copyToClipboard(msg.text)} className="btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', border: 'none', color: 'var(--text-muted)' }}>
+                        <Copy size={14} /> Copy Answer
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            ))
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        <div style={{ padding: '2rem', backgroundColor: 'transparent' }}>
-          {messages.length === 0 && selectedDocs.length === 1 && documents.find(d => d.id === selectedDocs[0])?.suggested_questions?.length > 0 && (
-            <div style={{ maxWidth: '800px', margin: '0 auto 1.5rem auto', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {documents.find(d => d.id === selectedDocs[0]).suggested_questions.map((sq, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => handleSend(sq)}
-                  style={{
-                    backgroundColor: 'var(--white)',
-                    border: '1px solid var(--border)',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '20px',
-                    fontSize: '0.875rem',
-                    color: 'var(--primary-dark)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                  }}
-                  onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.backgroundColor = 'rgba(29,158,117,0.05)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--white)'; }}
-                >
-                  {sq}
-                </button>
-              ))}
-            </div>
-          )}
-          <form onSubmit={(e) => { e.preventDefault(); handleSend(input); }} style={{ maxWidth: '800px', margin: '0 auto', position: 'relative' }}>
+        {/* Input Area */}
+        <div style={{ padding: '1.5rem', backgroundColor: 'var(--white)', borderTop: '1px solid var(--border)' }}>
+          <form onSubmit={(e) => { e.preventDefault(); handleSend(input); }} style={{ position: 'relative' }}>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={selectedDocs.length > 0 ? "Ask a question about the selected document(s)... (Shift+Enter for new line)" : "Please select a document first"}
+              placeholder={selectedDocs.length > 0 ? "Ask a question..." : "Select a document to begin"}
               disabled={selectedDocs.length === 0 || loading}
               style={{ 
                 width: '100%', 
                 resize: 'none', 
-                height: '60px', 
-                padding: '1rem 3.5rem 1rem 1.25rem', 
-                borderRadius: '12px',
+                height: '80px', 
+                padding: '1rem 3.5rem 1rem 1rem', 
+                borderRadius: '8px',
                 border: '1px solid var(--border)',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                 fontSize: '1rem',
                 lineHeight: '1.5',
-                backgroundColor: 'var(--white)',
-                color: 'var(--text-main)'
+                backgroundColor: 'var(--bg-light)',
+                color: 'var(--text-main)',
+                boxShadow: 'none'
               }}
             />
             <button 
@@ -493,46 +426,150 @@ const ChatPanel = () => {
               disabled={selectedDocs.length === 0 || !input.trim() || loading}
               style={{ 
                 position: 'absolute',
-                right: '0.75rem',
-                top: '50%',
-                transform: 'translateY(-50%)',
+                right: '1rem',
+                bottom: '1rem',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                width: '36px', height: '36px', 
+                width: '32px', height: '32px', 
                 padding: 0,
-                borderRadius: '8px',
-                backgroundColor: (selectedDocs.length === 0 || !input.trim() || loading) ? 'var(--bg-light)' : 'var(--primary)',
+                borderRadius: '6px',
+                backgroundColor: (selectedDocs.length === 0 || !input.trim() || loading) ? 'transparent' : 'var(--primary)',
                 color: (selectedDocs.length === 0 || !input.trim() || loading) ? 'var(--text-muted)' : 'white',
                 border: 'none',
                 cursor: (selectedDocs.length === 0 || !input.trim() || loading) ? 'not-allowed' : 'pointer',
-                transition: 'background-color 0.2s'
               }}
             >
-              <Send size={18} />
+              <Send size={16} />
             </button>
           </form>
-          <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-            ManifestIQ can make mistakes. Verify critical supply chain information.
-          </p>
         </div>
       </div>
       
-      {/* PDF Viewer Pane */}
-      <AnimatePresence>
-        {showPdf && selectedDocs.length === 1 && (
-          <motion.div 
-            initial={{ opacity: 0, width: 0 }} 
-            animate={{ opacity: 1, width: '45%' }} 
-            exit={{ opacity: 0, width: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            style={{ height: '100%', overflow: 'hidden' }}
-          >
-            <PdfViewer 
-              ref={pdfRef} 
-              fileUrl={`http://localhost:8000/api/documents/${selectedDocs[0]}/pdf`} 
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 3. Right Column - Sources & Metrics */}
+      <div className="chat-right-panel" style={{ width: showPdf ? '500px' : '340px', flexShrink: 0, borderLeft: '1px solid var(--border)', backgroundColor: 'var(--bg-light)', display: 'flex', flexDirection: 'column', transition: 'width 0.3s ease', position: 'relative', overflow: 'hidden' }}>
+        
+        {/* PDF Drawer Mode */}
+        <AnimatePresence>
+          {showPdf && (
+            <motion.div 
+              initial={{ x: '100%' }} 
+              animate={{ x: 0 }} 
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.3 }}
+              style={{ position: 'absolute', inset: 0, zIndex: 20, backgroundColor: 'var(--white)', display: 'flex', flexDirection: 'column' }}
+            >
+              <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-light)' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <FileText size={16} color="var(--primary)" /> Document Preview
+                </div>
+                <button onClick={() => setShowPdf(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <PdfViewer ref={pdfRef} fileUrl={`http://localhost:8000/api/documents/${showPdf.docId}/pdf`} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Normal Sources & Metrics Mode */}
+        <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+            <FileCheck size={16} color="var(--primary)" /> Knowledge Base
+          </h3>
+          <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', backgroundColor: 'rgba(37,99,235,0.1)', color: 'var(--primary)', borderRadius: '12px', fontWeight: 600 }}>
+            {documents.length} Documents Indexed
+          </span>
+        </div>
+
+        <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+          {latestAiMsg ? (
+            <>
+              {/* Card 1 - Sources */}
+              {citations.length > 0 && (
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', margin: 0 }}>
+                      <Database size={16} color="var(--primary)" /> Source Ranking
+                    </h4>
+                    <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', backgroundColor: 'var(--bg-light)', color: 'var(--text-main)', borderRadius: '4px', fontWeight: 600, border: '1px solid var(--border)' }}>
+                      Average Similarity: {avgSimilarity}%
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {citations.map((cit, idx) => (
+                      <div key={idx} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--bg-light)' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--primary)', marginBottom: '0.5rem', wordBreak: 'break-all', display: 'flex', gap: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>#{idx + 1}</span> {cit.filename}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                          <span>Page {cit.page} {cit.total_pages ? `of ${cit.total_pages}` : ''}</span>
+                          <span>Similarity: <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{Math.round(cit.confidence)}%</span></span>
+                        </div>
+                        <button 
+                          onClick={() => openPdf(cit.document_id, cit.page)}
+                          className="btn-outline" 
+                          style={{ width: '100%', padding: '0.5rem', fontSize: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)' }}
+                        >
+                          <ExternalLink size={14} /> Preview
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Card 2 - Metrics */}
+              {latestAiMsg.retrievalAnalytics && (
+                <div className="card" style={{ padding: '1.25rem', borderRadius: '12px' }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', margin: 0 }}>
+                    <Cpu size={16} color="var(--primary)" /> Retrieval Statistics
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Documents Referenced</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{uniqueDocs}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Chunks Retrieved</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.chunk_count}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Average Similarity</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{avgSimilarity}%</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Response Time</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.total_time_ms ? (latestAiMsg.retrievalAnalytics.total_time_ms / 1000).toFixed(2) + ' sec' : '-'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Retrieval Time</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.time_ms} ms</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Model</span>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.model || 'Gemini Flash'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', marginTop: '3rem' }}>
+              Ask a question to see the source ranking and retrieval metrics.
+            </div>
+          )}
+        </div>
+
+        {/* Session Footer */}
+        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', backgroundColor: 'var(--white)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Questions: <strong style={{ color: 'var(--text-main)' }}>{totalQuestions}</strong></span>
+            <span>Sources Used: <strong style={{ color: 'var(--text-main)' }}>{sessionUniqueDocs.size}</strong></span>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 };

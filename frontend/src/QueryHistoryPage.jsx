@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SearchX, MessageSquare, Download } from 'lucide-react';
+import { Search, SearchX, MessageSquare, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import api from './api';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from './ToastContext';
@@ -20,7 +20,6 @@ const QueryHistoryPage = () => {
         setHistory(res.data.items || res.data);
       } catch (err) {
         console.error(err);
-        // Fallback for when backend endpoint isn't ready
         setHistory([]);
       } finally {
         setLoading(false);
@@ -60,82 +59,126 @@ const QueryHistoryPage = () => {
     showToast("Exported history to CSV", "success");
   };
 
+  const getStatusBadge = (isError) => {
+    if (isError) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--error)', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
+          <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--error)' }}></div>
+          Failed
+        </span>
+      );
+    }
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)', backgroundColor: 'rgba(34, 197, 94, 0.1)' }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--success)' }}></div>
+        Success
+      </span>
+    );
+  };
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="page-header">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ padding: '2rem' }}>
+      <div className="page-header section-spacing">
         <h1>Query History</h1>
         <p>Review past questions and answers across all your documents.</p>
       </div>
 
-      <div className="card" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid var(--border)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
-          <Search size={20} color="var(--text-muted)" />
-          <input 
-            type="text" 
-            placeholder="Search by keyword or document name..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ border: 'none', padding: 0, outline: 'none', backgroundColor: 'transparent', width: '100%' }}
-          />
-        </div>
-        <button className="btn-outline" onClick={handleExportCSV} disabled={filteredHistory.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
-          <Download size={18} /> Export CSV
-        </button>
-      </div>
+      <div className="card section-spacing" style={{ padding: 0, overflow: 'hidden' }}>
+        
+        {/* Toolbar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', backgroundColor: 'var(--bg-light)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '1rem' }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                placeholder="Search queries or documents..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ paddingLeft: '35px', width: '300px', backgroundColor: 'var(--white)' }}
+              />
+            </div>
+          </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ backgroundColor: 'var(--bg-light)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-              <th style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Query</th>
-              <th style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Document</th>
-              <th style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Date</th>
-              <th style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <>
-                {[1, 2, 3].map((n) => (
-                  <tr key={n} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '80%' }}></div></td>
-                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '50%' }}></div></td>
-                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '20px', width: '60%' }}></div></td>
-                    <td style={{ padding: '1.25rem 1rem' }}><div className="skeleton" style={{ height: '32px', width: '80px', borderRadius: '6px' }}></div></td>
-                  </tr>
-                ))}
-              </>
-            ) : filteredHistory.length > 0 ? (
-              filteredHistory.map((item, i) => (
-                <motion.tr 
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
-                  key={item.id} 
-                  style={{ borderBottom: '1px solid var(--border)' }}
-                >
-                  <td style={{ padding: '1rem', fontWeight: 500 }}>{item.query}</td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{item.document_name || `Doc #${item.document_id}`}</td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{new Date(item.timestamp).toLocaleString()}</td>
-                  <td style={{ padding: '1rem' }}>
-                    <button className="btn-outline" style={{ padding: '0.5rem 1rem' }} onClick={() => setSelectedQuery(item)}>View</button>
-                  </td>
-                </motion.tr>
-              ))
-            ) : (
+          <button className="btn-outline" onClick={handleExportCSV} disabled={filteredHistory.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)' }}>
+            <Download size={16} /> Export CSV
+          </button>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX: 'auto', maxHeight: '600px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--white)', zIndex: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
               <tr>
-                <td colSpan="4" style={{ padding: '4rem 2rem' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                    <SearchX size={48} style={{ margin: '0 auto 1.5rem auto', color: 'var(--border)' }} />
-                    <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>No queries found</h3>
-                    <p style={{ marginBottom: '1.5rem' }}>You haven't asked any questions yet.</p>
-                    <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => navigate('/chat')}>
-                      <MessageSquare size={18} /> Go to Chat
-                    </button>
-                  </div>
-                </td>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Question</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Document</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Response Time</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Date</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>Status</th>
+                <th style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem', textAlign: 'right' }}>Action</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <>
+                  {[1, 2, 3].map((n) => (
+                    <tr key={n} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '20px', width: '80%' }}></div></td>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '20px', width: '50%' }}></div></td>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '20px', width: '40%' }}></div></td>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '20px', width: '60%' }}></div></td>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '24px', width: '80px', borderRadius: '12px' }}></div></td>
+                      <td style={{ padding: '1.25rem 1.5rem' }}><div className="skeleton" style={{ height: '32px', width: '60px', borderRadius: '6px', marginLeft: 'auto' }}></div></td>
+                    </tr>
+                  ))}
+                </>
+              ) : filteredHistory.length > 0 ? (
+                filteredHistory.map((item, i) => (
+                  <motion.tr 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
+                    key={item.id} 
+                    style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s' }}
+                  >
+                    <td style={{ padding: '1rem 1.5rem', fontWeight: 500, color: 'var(--text-main)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.query}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                      {item.document_name || `Doc #${item.document_id}`}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                      {item.response_time_ms ? `${item.response_time_ms} ms` : '-'}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                      {new Date(item.timestamp).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem' }}>
+                      {getStatusBadge(!item.answer || item.answer.includes("**Error:**"))}
+                    </td>
+                    <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
+                      <button className="btn-outline" style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setSelectedQuery(item)}>
+                        View
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                      <SearchX size={48} style={{ margin: '0 auto 1.5rem auto', color: 'var(--border)' }} />
+                      <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-main)' }}>No queries found</h3>
+                      <p style={{ marginBottom: '1.5rem' }}>You haven't asked any questions yet.</p>
+                      <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => navigate('/chat')}>
+                        <MessageSquare size={16} /> Go to Chat
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Detail Modal */}
@@ -157,11 +200,11 @@ const QueryHistoryPage = () => {
               <p style={{ lineHeight: '1.6', whiteSpace: 'pre-wrap', backgroundColor: 'var(--bg-light)', padding: '1rem', borderRadius: '8px' }}>{selectedQuery.answer}</p>
             </div>
             
-            <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', marginBottom: '1.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
               <div><strong>Document:</strong> {selectedQuery.document_name}</div>
               <div><strong>Date:</strong> {new Date(selectedQuery.timestamp).toLocaleString()}</div>
-              <div><strong>Response Time:</strong> {selectedQuery.response_time_ms}ms</div>
-              <div><strong>Grounded:</strong> {selectedQuery.is_grounded ? 'Yes' : 'No'}</div>
+              <div><strong>Response Time:</strong> {selectedQuery.response_time_ms} ms</div>
+              <div><strong>Status:</strong> {getStatusBadge(!selectedQuery.answer || selectedQuery.answer.includes("**Error:**"))}</div>
             </div>
 
             {selectedQuery.citations && selectedQuery.citations.length > 0 && (

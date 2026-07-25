@@ -1,28 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 :root {
-  --primary: #2563eb;
+  --primary: #2563EB;
   --primary-dark: #1d4ed8;
-  --primary-bg: #1e3a8a;
+  --primary-bg: #eff6ff;
   --bg-light: #F8FAFC;
-  --text-main: #1E293B;
-  --text-muted: #64748B;
+  --text-main: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
   --border: #E2E8F0;
   --white: #FFFFFF;
-  --error: #ef4444;
-  --danger: #ef4444;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --chart-blue: #3b82f6;
-  --chart-purple: #8b5cf6;
-  --chart-green: #10b981;
-  --chart-orange: #f59e0b;
+  --error: #EF4444;
+  --danger: #EF4444;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --chart-blue: #3B82F6;
+  --chart-purple: #8B5CF6;
+  --chart-green: #22C55E;
+  --chart-orange: #F59E0B;
 }
 
 body.dark {
-  --primary-bg: #0A1917;
+  --primary: #3B82F6;
+  --primary-bg: #1e3a8a;
   --bg-light: #0F172A;
   --text-main: #F8FAFC;
+  --text-secondary: #CBD5E1;
   --text-muted: #94A3B8;
   --border: #334155;
   --white: #1E293B;
@@ -99,8 +102,13 @@ input:focus, textarea:focus {
 .card {
   background-color: var(--white);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.section-spacing {
+  margin-bottom: 24px;
 }
 
 /* Toast */
@@ -197,4 +205,75 @@ input:focus, textarea:focus {
   .chat-sidebar + .card {
     min-height: 500px;
   }
+  
+  .chat-right-panel {
+    width: 100% !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Markdown Styling */
+.markdown-body {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.markdown-body p {
+  margin-bottom: 1rem;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.markdown-body strong {
+  font-weight: 600;
+}
+.markdown-body ul, .markdown-body ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.markdown-body li {
+  margin-bottom: 0.25rem;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--border);
+  padding: 0.5rem;
+  text-align: left;
+}
+.markdown-body th {
+  background-color: var(--bg-light);
+  font-weight: 600;
+}
+.markdown-body pre {
+  background: var(--bg-light);
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+}
+.markdown-body code {
+  font-family: monospace;
+  background: var(--bg-light);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  border: none;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-family: 'Space Grotesk', sans-serif;
 }
