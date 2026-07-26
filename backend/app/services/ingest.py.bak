@@ -8,6 +8,7 @@ from langchain_core.embeddings import Embeddings
 from typing import List
 import requests
 from app.config import settings
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy.orm import Session
 from app.models.document import Document
 
@@ -46,7 +47,7 @@ google_ef = GoogleRESTLangchainEmbeddings()
 def generate_suggested_questions(text_snippet: str) -> str:
     """Generate 3 dynamic suggested questions based on document content."""
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={settings.GOOGLE_API_KEY}"
+        model = ChatGoogleGenerativeAI(model="gemini-3.5-flash", google_api_key=settings.GOOGLE_API_KEY)
         prompt = f"""
         Based on the following supply chain document excerpt, generate 3 specific, useful questions that a user might ask about it.
         Return ONLY a valid JSON array of 3 strings. Do not include any other formatting, markdown, or text.
@@ -54,25 +55,23 @@ def generate_suggested_questions(text_snippet: str) -> str:
         Excerpt:
         {text_snippet}
         """
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        resp = requests.post(url, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```json"):
-                text = text[7:-3].strip()
-            elif text.startswith("```"):
-                text = text[3:-3].strip()
-            questions = json.loads(text)
-            if isinstance(questions, list):
-                return json.dumps(questions[:3])
+        response = model.invoke(prompt)
+        text = response.content.strip()
+        if text.startswith("```json"):
+            text = text[7:-3].strip()
+        elif text.startswith("```"):
+            text = text[3:-3].strip()
+        questions = json.loads(text)
+        if isinstance(questions, list):
+            return json.dumps(questions[:3])
     except Exception as e:
         logger.error(f"Failed to generate suggested questions: {str(e)}", exc_info=True)
     return json.dumps(["What are the key terms in this document?", "Who are the parties involved?", "What are the deadlines?"])
+
 def generate_summary_and_keywords(text_snippet: str) -> dict:
     """Generate a summary and keywords for the document."""
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={settings.GOOGLE_API_KEY}"
+        model = ChatGoogleGenerativeAI(model="gemini-3.5-flash", google_api_key=settings.GOOGLE_API_KEY)
         prompt = f"""
         Based on the following supply chain document excerpt, generate:
         1. A brief summary (2-3 sentences) of the document's purpose.
@@ -83,23 +82,21 @@ def generate_summary_and_keywords(text_snippet: str) -> dict:
         Excerpt:
         {text_snippet}
         """
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        resp = requests.post(url, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```json"):
-                text = text[7:-3].strip()
-            elif text.startswith("```"):
-                text = text[3:-3].strip()
-            parsed = json.loads(text)
-            return {
-                "summary": parsed.get("summary", "Document summary unavailable."),
-                "keywords": parsed.get("keywords", [])
-            }
+        response = model.invoke(prompt)
+        text = response.content.strip()
+        if text.startswith("```json"):
+            text = text[7:-3].strip()
+        elif text.startswith("```"):
+            text = text[3:-3].strip()
+        data = json.loads(text)
+        return {
+            "summary": data.get("summary", "Document summary unavailable."),
+            "keywords": data.get("keywords", [])
+        }
     except Exception as e:
         logger.error(f"Failed to generate summary and keywords: {str(e)}", exc_info=True)
     return {"summary": "Document processed without summary.", "keywords": []}
+
 def ingest_document_sync(file_path: str, document_id: int, db: Session):
     try:
         logger.info(f"Starting ingestion for document {document_id}")
@@ -143,9 +140,6 @@ def ingest_document_sync(file_path: str, document_id: int, db: Session):
         )
         chunks = text_splitter.split_documents(documents)
         
-        num_pages = len(documents)
-        num_chunks = len(chunks)
-        
         if not chunks:
             logger.warning(f"No chunks extracted from document {document_id}")
             return
@@ -162,20 +156,6 @@ def ingest_document_sync(file_path: str, document_id: int, db: Session):
             
         faiss_db.save_local(FAISS_DATA_PATH)
         
-        # Build and save BM25 retriever
-        from langchain_community.retrievers import BM25Retriever
-        import pickle
-        all_docs = list(faiss_db.docstore._dict.values())
-        if all_docs:
-            bm25_retriever = BM25Retriever.from_documents(all_docs)
-            bm25_path = os.path.join(FAISS_DATA_PATH, "bm25.pkl")
-            with open(bm25_path, 'wb') as f:
-                pickle.dump(bm25_retriever, f)
-        
-        # Trigger reload of FAISS DB in QA Chain if it's already in memory
-        from app.services.qa_chain import reload_faiss_db
-        reload_faiss_db()
-        
         # Generate suggested questions from the first large chunk
         snippet = chunks[0].page_content[:2000] if chunks else ""
         suggested_questions_json = generate_suggested_questions(snippet)
@@ -190,8 +170,6 @@ def ingest_document_sync(file_path: str, document_id: int, db: Session):
             doc.suggested_questions = suggested_questions_json
             doc.summary = analysis["summary"]
             doc.keywords = json.dumps(analysis["keywords"])
-            doc.pages = num_pages
-            doc.chunk_count = num_chunks
             db.commit()
             
         logger.info(f"Successfully ingested document {document_id} with {len(chunks)} chunks.")

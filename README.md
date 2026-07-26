@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # ManifestIQ
 
 ![ManifestIQ Logo](frontend/public/logo.svg)
@@ -21,20 +20,11 @@ Powered by a Retrieval-Augmented Generation (RAG) architecture, ManifestIQ provi
 
 ManifestIQ is built using a decoupled modern web architecture:
 
-```mermaid
-graph TD
-    A[React Frontend Vite] <-->|REST API / JWT| B[FastAPI Backend]
-    B -->|Uploads| C[Local Storage PDFs]
-    B -->|SQLAlchemy| D[(PostgreSQL Data)]
-    B -->|Embedding Pipeline| E[Google text-embedding-004]
-    E -->|Vector Storage| F[(ChromaDB)]
-    B <-->|RAG Prompt + History| G[Google Gemini 1.5 Flash]
-    F -->|Similarity Search| B
-```
+![Architecture Diagram](frontend/public/architecture.jpg)
 
 - **Frontend**: React (Vite), Framer Motion, Recharts, Lucide Icons, Vanilla CSS (Design System).
 - **Backend**: FastAPI, SQLAlchemy, Uvicorn, Python 3.8+.
-- **Database**: PostgreSQL (Relational Data), ChromaDB (Vector Database).
+- **Database**: PostgreSQL (Relational Data), FAISS (Vector Database).
 - **AI / LLM**: Google Generative AI (Gemini 1.5 Flash + Text Embedding 004) REST APIs.
 
 ## 🚀 Installation & Deployment
@@ -83,7 +73,7 @@ The frontend will be available at `http://localhost:5173`.
 ## ⚡ Performance Optimization
 
 - **Embeddings**: Utilizes Google's robust REST API for embeddings, bypassing SDK version conflicts and reducing container bloat.
-- **Vector Search**: ChromaDB ensures fast $O(log N)$ similarity searches for document chunks.
+- **Vector Search**: FAISS ensures fast similarity searches for document chunks.
 - **Asset Serving**: Uploaded PDFs are efficiently served via FastAPI `StaticFiles` for instant browser rendering during source verification.
 
 ## 🧪 Testing
@@ -93,113 +83,66 @@ ManifestIQ includes robust routing and error handling:
 - `404 Not Found` & `500 Server Error`: Beautiful fallback pages for unexpected errors.
 - **Form Validation**: Strict email and password requirements enforced on both the client and server.
 
-## 🔮 Future Roadmap
-
-- Role-based Access Control (Admin, Manager, Employee)
-- Hybrid Search (Vector + BM25 Keyword)
-- Document Version Comparison
-- Enterprise SSO Integration
-=======
-# 🚀 ManifestIQ — Supply Chain Document Assistant
-
-ManifestIQ is a specialized Python/FastAPI application designed as an intelligent document assistant for Global Supply Chain Management Systems. It enables logistics professionals to upload supply chain documents such as shipping manifests, vendor SLAs, customs documents, and Standard Operating Procedures (SOPs), then ask natural language questions using a secure Retrieval-Augmented Generation (RAG) pipeline.
-
 ---
 
-# 🎯 Why ManifestIQ?
+## 🔮 Production Readiness Roadmap
 
-Modern supply chain platforms excel at tracking shipments and managing structured data. However, extracting information from unstructured documents such as contracts, customs regulations, and operating manuals is still a manual and time-consuming process.
+### Critical Fixes
+- [x] Fix `citation` → `citations` key mismatch (currently crashes every `/api/query/ask` call)
+- [x] Add `GET /api/query/history` (with pagination, search, sorting)
+- [x] Add `response_time` column to `QueryLog`; populate from real retrieval time
+- [x] Compute dashboard's average response time from real data instead of a hardcoded string
+- [x] Fail the upload loudly on embedding errors instead of storing a zero-vector
+- [x] Verify Gemini model names against Google's current, live API
+- [ ] Rotate any previously-exposed API key
 
-ManifestIQ solves this challenge by integrating modern AI technologies into supply chain workflows. It demonstrates production-level implementation of Vector Search, LangChain RAG architecture, FastAPI, and Docker while ensuring grounded AI responses that minimize hallucinations.
+### Backend Hardening
+- [x] Replace the hand-rolled embedding wrapper with `langchain-google-genai`'s official class (Note: kept hand-rolled wrapper due to Python 3.8 limitations, but fortified with error handling and logging)
+- [x] Consolidate login to a single identifier (email or username) + password
+- [x] Move PDF ingestion to background processing (FastAPI `BackgroundTasks` or Celery + Redis)
+- [x] Add database indexes: `User.email`, `User.username`, `QueryLog.document_id`, `QueryLog.timestamp`
+- [x] Add pagination to Documents, Query History, Analytics
+- [x] Add rate limiting on `/login`, `/signup`, `/ask` (e.g. `slowapi`)
+- [x] Replace `print()` calls with structured `logging`
+- [x] Clean up `requirements.txt` (remove unused `chromadb`/`pysqlite3-binary`, pin `bcrypt`, normalize line endings)
+- [x] Restrict CORS from `["*"]` to actual frontend origin(s)
 
----
+### Frontend Improvements
+- [x] Axios interceptor for `401` responses → clean redirect to login with a session-expired message
+- [x] Query history detail modal (question, answer, citations, timestamp, response time)
+- [x] Dynamic suggested questions in chat (shown before the first message, hidden after)
+- [x] Rename "Confidence" to "Relevance Score" (it's a heuristic from vector distance, not a calibrated probability)
+- [ ] Skeleton loaders instead of plain loading text
+- [ ] Mobile-responsive collapsible sidebar
+- [ ] Upload progress indicator
 
-# ✨ Key Features
+### Production & DevOps
+- [x] Pytest coverage for backend (auth, upload, ask, history)
+- [ ] React Testing Library coverage for frontend (auth, chat, upload)
+- [x] GitHub Actions CI (install → test → lint → build)
+- [ ] Docker + Docker Compose for full local stack
+- [ ] Health (`/health`) and readiness (`/ready`) endpoints
+- [ ] Alembic for database migrations
+- [ ] Environment variable validation on startup
+- [ ] Structured JSON logging
+- [ ] Error tracking (Sentry)
 
-- Advanced Retrieval-Augmented Generation (RAG) pipeline
-- Upload and process PDF documents
-- Semantic search using ChromaDB vector database
-- AI-powered answers using Google Gemini API
-- Grounded responses based only on uploaded documents
-- Automatic source citations for every answer
-- JWT Authentication
-- Analytics dashboard for document activity and query tracking
-- Responsive React-based enterprise dashboard
-- Dockerized deployment with Docker Compose
+### Advanced AI Features
+- [ ] AI-generated document summary (purpose, key topics, important dates/numbers, risks, entities)
+- [ ] AI keyword extraction and filtering by keyword
+- [ ] Multi-document chat (ask a question across several selected documents at once)
+- [ ] Semantic document search (vector search without chat)
+- [ ] Conversation memory (follow-up questions without repeating context)
+- [ ] Streaming AI responses
+- [ ] OCR support for scanned PDFs
+- [ ] Export chat (PDF / DOCX / Markdown)
+- [ ] User feedback loop (👍 / 👎 on answers)
+- [ ] Split-screen PDF preview with highlighted citation text
 
----
-
-# 📈 Real-World Use Cases
-
-### Customs Brokers
-
-Instantly search a large customs tariff manual to find the exact duty rate for a specific HS Code.
-
-### Procurement Managers
-
-Upload vendor agreements and instantly ask questions such as:
-
-> What is the financial penalty for a delivery delayed by 48 hours?
-
-Receive an immediate answer with document citation.
-
-### Warehouse Staff
-
-Quickly search Standard Operating Procedures for hazardous material handling instructions without reading hundreds of pages.
-
-### Logistics Teams
-
-Retrieve shipment policies, compliance requirements, packaging standards, and transportation guidelines within seconds.
-
-
-
----
-
-# 📂 Project Structure
-
-```
-ManifestIQ
-│
-├── backend/
-│   ├── app/
-│   ├── requirements.txt
-│   └── Dockerfile
-│
-├── frontend/
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── docker-compose.yml
-├── .env
-└── README.md
-```
-
----
-
-# 🔒 Security Features
-
-- JWT Authentication
-- Protected API Endpoints
-- Secure Environment Variables
-- Grounded AI Responses
-- Source Citations
-- Retrieval-Based Answer Generation
-
----
-
-# 📊 Future Improvements
-
-- Multi-document search
-- OCR support for scanned PDFs
-- Voice-based document queries
-- Role-based access control (RBAC)
-- Document version management
-- Chat history
-- Redis caching
-- Kubernetes deployment
-
----
-
-
->>>>>>> ac4433c879657ed174abb46d18d59ddd35951600
+### Enterprise Features
+- [ ] Workspace / folder organization (HR, Finance, Legal, etc.)
+- [ ] Shareable document links (read-only, expiring)
+- [ ] Role-based access control
+- [ ] Admin dashboard (users, storage, errors, server health)
+- [ ] User activity and audit logs
+- [ ] In-app notifications (upload complete, processing failed, new login)

@@ -12,9 +12,21 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
       - ./backend/uploads:/app/uploads
-      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/faiss_index:/app/faiss_index
     depends_on:
       - db
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - web
     restart: always
 
   db:
