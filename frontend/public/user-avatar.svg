@@ -1,0 +1,55 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Premium Enterprise Gradient Background -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    
+    <!-- Subtle Inner Glow -->
+    <radialGradient id="innerGlow" cx="64" cy="40" r="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#1E40AF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Clean Executive Gradient Shading -->
+    <linearGradient id="bodyGrad" x1="64" y1="74" x2="64" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+
+    <linearGradient id="headGrad" x1="64" y1="28" x2="64" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F1F5F9"/>
+    </linearGradient>
+
+    <clipPath id="circleClip">
+      <circle cx="64" cy="64" r="64"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#circleClip)">
+    <!-- Base Gradient Background -->
+    <rect width="128" height="128" fill="url(#bgGrad)"/>
+    <rect width="128" height="128" fill="url(#innerGlow)"/>
+
+    <!-- Subtle Decorative Geometric Rings (Enterprise aesthetic) -->
+    <circle cx="64" cy="64" r="54" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.5"/>
+    <circle cx="64" cy="64" r="44" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1"/>
+
+    <!-- Professional Executive Silhouette (Clean, minimal illustration) -->
+    <!-- Shoulders / Suit Jacket Silhouette -->
+    <path d="M22 128 C22 96 38 82 64 82 C90 82 106 96 106 128 Z" fill="url(#bodyGrad)"/>
+    
+    <!-- Sophisticated Collar Accent -->
+    <path d="M52 82 L64 94 L76 82" stroke="#CBD5E1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M64 94 V128" stroke="#CBD5E1" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Head / Clean Profile Silhouette -->
+    <circle cx="64" cy="48" r="20" fill="url(#headGrad)"/>
+
+    <!-- Subtle Premium Highlight -->
+    <circle cx="58" cy="42" r="17" fill="#FFFFFF" fill-opacity="0.2"/>
+  </g>
+</svg>

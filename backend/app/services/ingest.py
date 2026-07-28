@@ -19,6 +19,7 @@ os.makedirs(FAISS_DATA_PATH, exist_ok=True)
 
 class GoogleRESTLangchainEmbeddings(Embeddings):
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        import time
         api_key = settings.GOOGLE_API_KEY
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key={api_key}"
         embeddings = []
@@ -29,13 +30,24 @@ class GoogleRESTLangchainEmbeddings(Embeddings):
                     "parts": [{"text": text}]
                 }
             }
-            resp = requests.post(url, json=payload)
-            if resp.status_code != 200:
-                logger.error(f"Embedding error: {resp.text}")
-                raise Exception(f"Embedding API failed: {resp.text}")
-            else:
-                data = resp.json()
-                embeddings.append(data["embedding"]["values"])
+            last_error = None
+            for attempt in range(3):
+                try:
+                    resp = requests.post(url, json=payload, timeout=15)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        embeddings.append(data["embedding"]["values"])
+                        last_error = None
+                        break
+                    else:
+                        last_error = f"Status {resp.status_code}: {resp.text}"
+                        time.sleep(1.5 * (attempt + 1))
+                except Exception as ex:
+                    last_error = str(ex)
+                    time.sleep(1.5 * (attempt + 1))
+            if last_error:
+                logger.error(f"Embedding error after retries: {last_error}")
+                raise Exception(f"Embedding API failed: {last_error}")
         return embeddings
 
     def embed_query(self, text: str) -> List[float]:
@@ -45,60 +57,65 @@ google_ef = GoogleRESTLangchainEmbeddings()
 
 def generate_suggested_questions(text_snippet: str) -> str:
     """Generate 3 dynamic suggested questions based on document content."""
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={settings.GOOGLE_API_KEY}"
-        prompt = f"""
-        Based on the following supply chain document excerpt, generate 3 specific, useful questions that a user might ask about it.
-        Return ONLY a valid JSON array of 3 strings. Do not include any other formatting, markdown, or text.
-        
-        Excerpt:
-        {text_snippet}
-        """
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        resp = requests.post(url, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```json"):
-                text = text[7:-3].strip()
-            elif text.startswith("```"):
-                text = text[3:-3].strip()
-            questions = json.loads(text)
-            if isinstance(questions, list):
-                return json.dumps(questions[:3])
-    except Exception as e:
-        logger.error(f"Failed to generate suggested questions: {str(e)}", exc_info=True)
+    fallback_models = ["gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.0-flash"]
+    prompt = f"""
+    Based on the following supply chain document excerpt, generate 3 specific, useful questions that a user might ask about it.
+    Return ONLY a valid JSON array of 3 strings. Do not include any other formatting, markdown, or text.
+    
+    Excerpt:
+    {text_snippet}
+    """
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    for model_name in fallback_models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GOOGLE_API_KEY}"
+            resp = requests.post(url, json=payload, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if text.startswith("```json"):
+                    text = text[7:-3].strip()
+                elif text.startswith("```"):
+                    text = text[3:-3].strip()
+                questions = json.loads(text)
+                if isinstance(questions, list):
+                    return json.dumps(questions[:3])
+        except Exception as e:
+            logger.error(f"Failed to generate suggested questions with {model_name}: {str(e)}")
     return json.dumps(["What are the key terms in this document?", "Who are the parties involved?", "What are the deadlines?"])
+
 def generate_summary_and_keywords(text_snippet: str) -> dict:
     """Generate a summary and keywords for the document."""
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={settings.GOOGLE_API_KEY}"
-        prompt = f"""
-        Based on the following supply chain document excerpt, generate:
-        1. A brief summary (2-3 sentences) of the document's purpose.
-        2. A list of 4-6 key entities, terms, or risk factors as keywords.
-        
-        Return ONLY a valid JSON object with the keys "summary" (string) and "keywords" (array of strings). Do not include any other formatting or markdown.
-        
-        Excerpt:
-        {text_snippet}
-        """
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        resp = requests.post(url, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```json"):
-                text = text[7:-3].strip()
-            elif text.startswith("```"):
-                text = text[3:-3].strip()
-            parsed = json.loads(text)
-            return {
-                "summary": parsed.get("summary", "Document summary unavailable."),
-                "keywords": parsed.get("keywords", [])
-            }
-    except Exception as e:
-        logger.error(f"Failed to generate summary and keywords: {str(e)}", exc_info=True)
+    fallback_models = ["gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.0-flash"]
+    prompt = f"""
+    Based on the following supply chain document excerpt, generate:
+    1. A brief summary (2-3 sentences) of the document's purpose.
+    2. A list of 4-6 key entities, terms, or risk factors as keywords.
+    
+    Return ONLY a valid JSON object with the keys "summary" (string) and "keywords" (array of strings). Do not include any other formatting or markdown.
+    
+    Excerpt:
+    {text_snippet}
+    """
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    for model_name in fallback_models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GOOGLE_API_KEY}"
+            resp = requests.post(url, json=payload, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if text.startswith("```json"):
+                    text = text[7:-3].strip()
+                elif text.startswith("```"):
+                    text = text[3:-3].strip()
+                parsed = json.loads(text)
+                return {
+                    "summary": parsed.get("summary", "Document summary unavailable."),
+                    "keywords": parsed.get("keywords", [])
+                }
+        except Exception as e:
+            logger.error(f"Failed to generate summary and keywords with {model_name}: {str(e)}")
     return {"summary": "Document processed without summary.", "keywords": []}
 def ingest_document_sync(file_path: str, document_id: int, db: Session):
     try:

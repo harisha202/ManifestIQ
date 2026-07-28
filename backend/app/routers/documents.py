@@ -78,7 +78,7 @@ def list_documents(
             "status": d.status,
             "pages": d.pages,
             "chunk_count": d.chunk_count,
-            "file_size_bytes": d.file_size_bytes,
+            "file_size_bytes": getattr(d, "file_size_bytes", 0),
             "suggested_questions": sq,
             "summary": d.summary,
             "keywords": json.loads(d.keywords) if d.keywords else []

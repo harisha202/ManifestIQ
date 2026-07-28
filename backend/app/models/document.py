@@ -15,6 +15,7 @@ class Document(Base):
     suggested_questions = Column(Text, nullable=True) # JSON serialized list of strings
     pages = Column(Integer, nullable=True, default=0)
     chunk_count = Column(Integer, nullable=True, default=0)
+    file_size_bytes = Column(Integer, nullable=True, default=0)
     user_id = Column(Integer, ForeignKey("users.id"))
 
     user = relationship("User")

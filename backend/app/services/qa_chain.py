@@ -144,9 +144,8 @@ Question:
 Answer the question clearly and concisely.
 """
         
-        # Call Gemini REST API with streaming
+        # Call Gemini REST API with streaming and fallback models
         api_key = settings.GOOGLE_API_KEY
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse&key={api_key}"
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
@@ -171,21 +170,46 @@ Answer the question clearly and concisely.
                 "document_id": doc.metadata.get("document_id")
             })
 
+        fallback_models = [
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-2.5-flash",
+            "gemini-3.5-flash",
+            "gemini-2.0-flash"
+        ]
+        
+        successful_model = None
+        resp_obj = None
+        last_error_text = ""
+
+        import json
+        for model_name in fallback_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?alt=sse&key={api_key}"
+            try:
+                r = requests.post(url, json=payload, stream=True, timeout=30)
+                if r.status_code == 200:
+                    successful_model = model_name
+                    resp_obj = r
+                    break
+                else:
+                    last_error_text = f"Status {r.status_code}: {r.text[:150]}"
+                    print(f"Model {model_name} failed: {last_error_text}")
+                    r.close()
+            except Exception as ex:
+                last_error_text = str(ex)
+                print(f"Model {model_name} exception: {last_error_text}")
+
+        if not resp_obj or not successful_model:
+            yield json.dumps({"type": "error", "message": f"AI service temporarily unavailable ({last_error_text}). Please try again."}) + "\n"
+            return
+
         analytics = {
             "time_ms": int(retrieval_time * 1000),
             "chunk_count": len(results),
-            "model": "gemini-3.5-flash"
+            "model": successful_model
         }
 
-        # Yield metadata first
-        import json
-        
-        with requests.post(url, json=payload, stream=True) as resp:
-            if resp.status_code != 200:
-                print(f"Gemini API Error: {resp.status_code} - {resp.text}")
-                yield json.dumps({"type": "error", "message": "API Error"}) + "\n"
-                return
-
+        with resp_obj as resp:
             full_answer = ""
             for line in resp.iter_lines():
                 if line:

@@ -280,9 +280,12 @@ const ChatPanel = () => {
         
         {/* Header Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-light)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>ManifestIQ AI Assistant</h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Ask questions about your indexed supply-chain documents.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <img src="/logo.svg" alt="ManifestIQ" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>ManifestIQ AI Assistant</h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Ask questions about your indexed supply-chain documents.</span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={clearChat} className="btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--white)' }}>
@@ -298,7 +301,7 @@ const ChatPanel = () => {
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
           {messages.length === 0 ? (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-              <img src="/logo.svg" alt="ManifestIQ" style={{ width: '64px', height: '64px', marginBottom: '1.5rem', opacity: 0.8 }} />
+              <img src="/logo.svg" alt="ManifestIQ" style={{ width: '72px', height: '72px', marginBottom: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 12px rgba(15, 110, 86, 0.15)' }} />
               <h2 style={{ marginBottom: '0.5rem', color: 'var(--text-main)', fontSize: '1.5rem' }}>ManifestIQ AI</h2>
               <p style={{ marginBottom: '2rem' }}>Ask questions about your indexed supply-chain documents.</p>
               
@@ -345,13 +348,14 @@ const ChatPanel = () => {
               <div key={msg.id} style={{ display: 'flex', marginBottom: '2rem' }}>
                 <div style={{ width: '40px', flexShrink: 0, marginRight: '1rem', display: 'flex', justifyContent: 'center' }}>
                   <div style={{ 
-                    width: '32px', height: '32px', borderRadius: '4px',
+                    width: '32px', height: '32px', borderRadius: msg.role === 'user' ? '50%' : '6px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: msg.role === 'user' ? 'var(--bg-light)' : 'var(--primary)',
-                    color: msg.role === 'user' ? 'var(--text-secondary)' : 'var(--white)',
-                    border: '1px solid var(--border)'
+                    background: 'transparent',
+                    border: msg.role === 'user' ? '1px solid var(--border)' : 'none',
+                    overflow: 'hidden',
+                    boxShadow: msg.role === 'user' ? '0 2px 4px rgba(0,0,0,0.08)' : 'none'
                   }}>
-                    {msg.role === 'user' ? <User size={18} /> : <img src="/logo.svg" alt="AI" style={{ width: '18px', height: '18px', filter: 'brightness(0) invert(1)' }} />}
+                    {msg.role === 'user' ? <img src="/user-avatar.svg" alt="User" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} /> : <img src="/logo.svg" alt="ManifestIQ AI" style={{ width: '32px', height: '32px', borderRadius: '6px' }} />}
                   </div>
                 </div>
                 
@@ -542,13 +546,9 @@ const ChatPanel = () => {
                       <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Response Time</span>
                       <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.total_time_ms ? (latestAiMsg.retrievalAnalytics.total_time_ms / 1000).toFixed(2) + ' sec' : '-'}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Retrieval Time</span>
                       <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.time_ms} ms</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Model</span>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{latestAiMsg.retrievalAnalytics.model || 'Gemini Flash'}</span>
                     </div>
                   </div>
                 </div>
